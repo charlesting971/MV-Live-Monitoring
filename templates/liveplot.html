@@ -1,0 +1,200 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style> 
+    #main {
+      border: 2px solid #131212;
+      display: block;
+      flex-wrap: wrap;
+      height: 180px;
+      width: 165px;
+      background-color:darksalmon;
+      position: fixed;
+      top: 0px;
+      left: 1350px;
+    }
+  </style>
+
+  <title>Flask SocketIO Test</title>
+
+</head>
+<body>
+  <p>Mechanical Ventilation Live Monitoring using Flask-SocketIO</p>
+  <button onclick="startLive()">Start Live Monitoring</button>
+  <button onclick="stopLive()" id="stopLiveButton" style="display:none">Stop Live Monitoring</button>
+  <div id="chartContainer1" style="height: 250px; width:60%;"></div>
+  <div id="chartContainer2" style="height: 250px; width:60%;"></div>
+  <div id="chartContainer3" style="height: 250px; width:60%;"></div>
+  <div id="main">
+      <div  id='Ers'>Ers: 0.00cmH2O/L</div><br>
+      <div  id='Rrs'>Rrs: 0.00cmH2O.s/L</div><br>
+      <div  id='PEEP'>PEEP: 0.00cmH2O</div><br>
+      <div  id='PIP'>PIP: 0.00cmH2O</div><br>
+      <div  id='Vtidal'>Vtidal: 0.00L</div><br>
+  </div>
+  <script>
+  function updateData(jsonfile){
+    var jsonReceived = JSON.parse(jsonfile)
+    document.getElementById('Ers').innerHTML = 'Ers:'+ jsonReceived.Ers.toFixed(2) +'cmH2O/L';
+    document.getElementById('Rrs').innerHTML = 'Rrs:'+ jsonReceived.Rrs.toFixed(2)  + 'cmH2O.s/L';
+    document.getElementById('PEEP').innerHTML = 'PEEP:'+ jsonReceived.PEEP.toFixed(2)  + 'cmH2O';
+    document.getElementById('PIP').innerHTML = 'PIP:'+ jsonReceived.PIP.toFixed(2)  + 'cmH2O';
+    document.getElementById('Vtidal').innerHTML = 'Vtidal:'+ jsonReceived.Vtidal.toFixed(2)  + 'L';
+  }
+  </script>
+  <script>
+  function plotFunc(jsonfile){
+
+  var jsonReceived = JSON.parse(jsonfile); // dataPoints
+  dpsP=[];
+  dpsQ=[];
+  dpsV=[];
+  time=0;
+    
+  for (i=0; i<jsonReceived.Pressure.length;i+=1){
+    dpsP.push({
+      x:time,
+      y:jsonReceived.Pressure[i]
+    });
+    dpsQ.push({
+      x:time,
+      y:jsonReceived.FlowRate[i]
+    });
+    dpsV.push({
+      x:time,
+      y:jsonReceived.Volume[i]
+    });
+      time+=0.02
+  }
+    
+   chartP = new CanvasJS.Chart("chartContainer1", {
+      zoomEnabled: true,
+      title :{
+          text: "Pressure"
+      },
+      axisX: {
+          title: 'Time (s)',
+      },          
+      axisY: {
+          title: 'Pressure (cmH2O)',
+          includeZero: false
+      },      
+      data: [{
+          type: "line",
+          lineColor: "blue",
+          dataPoints: dpsP
+      }]
+  });
+    
+   chartQ = new CanvasJS.Chart("chartContainer2", {
+      title :{
+          text: "Flow rate"
+      },
+      axisX: {
+          title: 'Time (s)',
+      },  
+      axisY: {
+          title: 'Flow rate (L/s)',
+          includeZero: false
+      },      
+      data: [{
+          type: "line",
+          lineColor: "orange",
+          dataPoints: dpsQ
+      }]
+    });
+
+    chartV = new CanvasJS.Chart("chartContainer3", {
+      zoomEnabled: true,
+      title :{
+          text: "Volume"
+      },
+      axisX: {
+          title: 'Time (s)',
+      },          
+      axisY: {
+          title: 'Volume (L)',
+          includeZero: false
+      },      
+      data: [{
+          type: "line",
+          lineColor: "red",
+          dataPoints: dpsV
+      }]
+  });    
+
+
+  chartP.render();
+  chartQ.render();
+  chartV.render();
+  }
+
+  
+  </script>
+
+  <script>
+  function updateFunc(newJSON){
+    var newJSONReceived = JSON.parse(newJSON);
+
+    for (i=0; i<newJSONReceived.Pressure.length;i+=1){
+    dpsP.push({
+      x:time,
+      y:newJSONReceived.Pressure[i]
+    });
+    dpsQ.push({
+      x:time,
+      y:newJSONReceived.FlowRate[i]
+    });
+    dpsV.push({
+      x:time,
+      y:newJSONReceived.Volume[i]
+    });    
+      time+=0.02
+    }
+
+    chartP.render();
+    chartQ.render();
+    chartV.render();  
+  }
+  </script>
+
+  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.6/socket.io.min.js"></script>
+  <script src="https://canvasjs.com/assets/script/canvasjs.min.js"></script>
+  <script type="text/javascript" charset="utf-8">
+    firstData = true;
+    var socket = io.connect('http://' + document.domain + ':' + location.port);
+    // verify our websocket connection is established
+    socket.on('connect', function() {
+        console.log('Websocket connected!');
+    });
+    // Receive the JSON file from server and runs plotFunc with it
+    socket.on('send2Client', function(JSONfile) {
+        //console.log(JSONfile);
+        console.log('Hello');
+        if (firstData == true){
+          plotFunc(JSONfile);
+        }
+        else {
+          updateFunc(JSONfile);
+        }
+        updateData(JSONfile);
+        firstData = false
+        socket.emit('requestFromClient');
+    });
+    // Button to initiate Data Fetching
+    function startLive() {
+      console.log('Fetching Data From Server...');
+      socket.emit('requestFromClient');
+      var stopLiveButton=document.getElementById("stopLiveButton");
+      stopLiveButton.style.display="flex";
+    }
+    // Button to stop Data Fetching
+    function stopLive() {
+      console.log('Stopped Fetching Data From Server...');
+      socket.emit('stoprequestFromClient');
+    }
+  </script>
+</body>
+</html>

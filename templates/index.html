@@ -1,0 +1,78 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js" integrity="sha256-yr4fRk/GU1ehYJPAs8P4JlTgu0Hdsp4ZKrx8bDEDC3I=" crossorigin="anonymous"></script>
+
+
+<script>
+function plotFunc(jsonfile){
+
+var jsonReceived = JSON.parse(jsonfile); // dataPoints
+var dps=[];
+var time=0;
+
+for (i=1; i<jsonReceived.length;i+=2){
+	dps.push({
+		x:time,
+		y:jsonReceived[i]
+	});
+    time+=0.02
+}
+
+var chart = new CanvasJS.Chart("chartContainer", {
+	title :{
+		text: "Pressure"
+	},
+	axisY: {
+		includeZero: false
+	},      
+	data: [{
+		type: "line",
+		dataPoints: dps
+	}]
+});
+
+chart.render();
+}
+
+var xVal = 0;
+var yVal = 100; 
+var updateInterval = 3000;
+var dataLength = 600; // ~3 breath cycle
+
+/*var updateChart = function (count) {
+
+	count = count || 1;
+
+	for (var j = 0; j < count; j++) {
+		yVal = yVal +  Math.round(5 + Math.random() *(-5-5));
+		dps.push({
+			x: xVal,
+			y: yVal
+		});
+		xVal++;
+	}
+
+	if (dps.length > dataLength) {
+		dps.shift();
+	}
+
+	chart.render();
+};
+
+updateChart(dataLength);
+setInterval(function(){updateChart()}, updateInterval);
+
+}*/
+</script>
+</head>
+<body>
+<div id="chartContainer" style="height: 370px; width:100%;"></div>
+<script src="https://canvasjs.com/assets/script/canvasjs.min.js"></script>
+<script type="text/javascript" charset="utf-8">
+	var socket = io();
+	socket.on('my response', plotFunc(jsonfile));
+</script>
+
+</body>
+</html>

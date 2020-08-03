@@ -1,0 +1,45 @@
+p {
+  display: inline-block;
+  margin: 0px;
+}
+
+button {
+  margin-left: 10px;
+  border-radius: 20px;
+  background-color: darkgreen;
+  color: white;  
+}
+
+ul {
+  list-style-type: none;
+  height: 110px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #333333;
+}
+
+li {
+  float: left;
+  height: 110px;
+  display: table-cell;
+}
+
+li div{
+  display: inline-block;
+  text-align: center;
+  vertical-align: center;
+  width: 180px;
+  text-decoration: none;
+  color: white;
+}
+
+li div:hover {
+  background-color: #111111;
+}
+
+br {
+  display: block;
+  margin: 1px ;
+}
+

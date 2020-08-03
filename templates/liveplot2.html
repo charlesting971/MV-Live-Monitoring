@@ -1,0 +1,310 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style> 
+    #main {
+      border: 2px solid #131212;
+      display: block;
+      flex-wrap: wrap;
+      height: 180px;
+      width: 165px;
+      background-color:darksalmon;
+      position: fixed;
+      top: 0px;
+      left: 1350px;
+    }
+  </style>
+
+  <title>Flask SocketIO Test</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+
+
+<body>
+  <p>Mechanical Ventilation Live Monitoring using Flask-SocketIO</p>
+  <button onclick="startLive()">Start Live Monitoring</button>
+  <button onclick="stopLive()" id="stopLiveButton" style="display:none">Stop Live Monitoring</button>
+  <div class="chart" id="pressure_chart"></div>
+  <div class="chart" id="flow_chart"></div>
+  <div class="chart" id="volume_chart"></div>
+  <div id="main">
+      <div  id='Ers'>Ers: 0.00cmH2O/L</div><br>
+      <div  id='Rrs'>Rrs: 0.00cmH2O.s/L</div><br>
+      <div  id='PEEP'>PEEP: 0.00cmH2O</div><br>
+      <div  id='PIP'>PIP: 0.00cmH2O</div><br>
+      <div  id='Vtidal'>Vtidal: 0.00L</div><br>
+  </div>
+  <script type="text/javascript" src="//code.jquery.com/jquery-2.1.4.min.js"></script>
+  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.6/socket.io.min.js"></script>
+ 
+  <script>
+    function updateData(jsonfile){
+      var jsonReceived = JSON.parse(jsonfile)
+      document.getElementById('Ers').innerHTML = 'Ers:'+ jsonReceived.Ers.toFixed(2) +'cmH2O/L';
+      document.getElementById('Rrs').innerHTML = 'Rrs:'+ jsonReceived.Rrs.toFixed(2)  + 'cmH2O.s/L';
+      document.getElementById('PEEP').innerHTML = 'PEEP:'+ jsonReceived.PEEP.toFixed(2)  + 'cmH2O';
+      document.getElementById('PIP').innerHTML = 'PIP:'+ jsonReceived.PIP.toFixed(2)  + 'cmH2O';
+      document.getElementById('Vtidal').innerHTML = 'Vtidal:'+ jsonReceived.Vtidal.toFixed(2)  + 'L';
+    }
+  </script>
+
+  <script type="text/javascript" charset="utf-8"> 
+    $(document).ready(function() {
+      // *Graph layout for P,Q,V
+      var pressure_layout = {
+        autosize: true,
+        // width: 1000,
+        height: 300,
+        title: "Pressure",
+        xaxis: {
+          title: "Time (s)",
+          type: "category",
+          showgrid: false,
+          showline: true,
+          fixedrange: true,
+          zeroline: false,
+          dtick: 200
+        },
+        yaxis: {
+          title: "cmH20",
+          fixedrange: true,
+          showline: true
+        },
+        font: {
+          family: "Fjalla One, sans-serif",
+          size: 18,
+          color: "black"
+        }
+      };
+
+      var flow_layout = {
+        autosize: true,
+        // width: 1000,
+        height: 300,
+        title: "Flow",
+        xaxis: {
+          title: "Time (s)",
+          type: "category",
+          showgrid: false,
+          zeroline: false,
+          fixedrange: true,
+          dtick: 200          
+          // tickformat: '%x %X',
+          // tickformat: "%X" // %x:date, %X:time
+        },
+        yaxis: {
+          title: "L/min",
+          fixedrange: true,
+          showline: true
+        },
+        font: {
+          family: "Fjalla One, sans-serif",
+          size: 18,
+          color: "black"
+        }
+      };
+
+      var volume_layout = {
+        autosize: true,
+        // width: 1000,
+        height: 300,
+        title: "Volume",
+        xaxis: {
+          title: "Time (s)",
+          type: "category",
+          showgrid: true,
+          zeroline: false,
+          fixedrange: true,
+          dtick: 200          
+          // tickformat: '%x %X',
+          // tickformat: "%X" // %x:date, %X:time
+        },
+        yaxis: {
+          title: "L",
+          fixedrange: true,
+          showline: true
+        },
+        font: {
+          family: "Fjalla One, sans-serif",
+          size: 18,
+          color: "black"
+        }
+      };
+
+      // *Initial empty array for P,Q,V data
+      var pressure_data = [
+        {
+          x: [],
+          y: [],
+          type: "line",
+          line: {
+            color: "rgb(55, 128, 191)",
+            width: 3
+          }
+        }
+      ];
+
+      var flow_data = [
+        {
+          x: [],
+          y: [],
+          type: "line",
+          line: {
+            color: "rgb(55, 128, 191)",
+            width: 3
+          }
+        }
+      ];
+
+      var volume_data = [
+        {
+          x: [],
+          y: [],
+          type: "line",
+          line: {
+            color: "rgb(55, 128, 191)",
+            width: 3
+          }
+        }
+      ];
+
+      // *Plot P,Q,V graph
+      Plotly.plot("pressure_chart", pressure_data, pressure_layout, { responsive: true });
+      Plotly.plot("flow_chart", flow_data, flow_layout, { responsive: true });
+      Plotly.plot("volume_chart", volume_data, volume_layout, { responsive: true });
+
+      var count = 0;
+      var P = [];
+      var Q = [];
+      var V = [];
+      var T = [];      
+      var P_display = [];
+      var Q_display = [];
+      var V_display = [];
+      var T_display = [];   
+      var past_P_display = [];
+      var past_Q_display = [];
+      var past_V_display = [];      
+
+      var disp_length = [850];
+      var breath_lengths = [];
+      var first_disp_length = true;
+
+      var now_1 = new Date();
+
+
+      for (var i = 0; i < 901; i++) {
+        P_display.push(NaN);
+        Q_display.push(NaN);
+        V_display.push(NaN);
+        var staticTime = [now_1.getHours(),':',now_1.getMinutes(),':',((parseInt(now_1.getSeconds())+(i*0.02)).toFixed(2)).toString()].join('');          
+        T_display.push(staticTime)
+      }  
+
+      /*plot_time = 0;
+      for (var i = 0; i < 901; i++) {
+        T_display.push(NaN);
+        //plot_time += 0.02;
+      }*/
+      
+      setInterval(function() {
+        if (breath_lengths.length == 5) {
+          disp_length.push(breath_lengths.reduce(function(a,b){
+            return a+b;
+          },0))
+          console.log(disp_length);
+          breath_lengths = [];
+        }
+      },20)
+
+      setInterval(function() {
+        if (Q.length > 0) {
+          console.log('start to plot graph with data');
+          P_display[count] = P[0];
+          Q_display[count] = Q[0];
+          V_display[count] = V[0];
+          T_display[count] = T[0];          
+          past_P_display.push(P.shift());
+          past_Q_display.push(Q.shift());
+          past_V_display.push(V.shift());
+          T.shift();
+          for (i = count + 1; i < count + 5; i++) {
+            P_display[i] = NaN;
+            Q_display[i] = NaN;
+            V_display[i] = NaN;          
+          }
+          count += 1;
+
+          if ((first_disp_length == true) && (disp_length.length == 2)){
+            disp_length.shift();
+            first_disp_length == false;
+          }
+
+          if (count > disp_length[0]) {
+            count = 1;
+            disp_length.shift();
+            console.log(T);             
+          }
+        }
+      }, 20);
+
+      setInterval(function() {
+        if (Q.length > 0) {
+          Plotly.update("pressure_chart", { x: [T_display], y: [P_display] });
+          Plotly.update("flow_chart", { x: [T_display], y: [Q_display] });
+          Plotly.update("volume_chart", { x: [T_display], y: [V_display] });        
+        }
+      }, 20);    
+
+      var socket = io.connect('http://' + document.domain + ':' + location.port);
+      // verify our websocket connection is established
+      socket.on('connect', function() {
+          console.log('Websocket connected!');
+      });
+      // Receive the JSON file from server and runs plotFunc with it
+      var j = 0
+      socket.on('send2Client', function(JSONfile) {
+          var jsonReceived = JSON.parse(JSONfile); // dataPoints
+          var now = new Date();
+
+          for (i = 0; i < jsonReceived.Pressure.length; i++) {
+          P.push(jsonReceived.Pressure[i]);
+          Q.push(jsonReceived.FlowRate[i]);
+          V.push(jsonReceived.Volume[i]);            
+
+          
+          var fulltime = [now.getHours(),':',now.getMinutes(),':',((parseInt(now.getSeconds())+(j*0.02)).toFixed(2)).toString()].join('');            
+          T.push(fulltime);
+          j += 1;
+          
+        }
+        breath_lengths.push(jsonReceived.Pressure.length);
+        console.log('breath lengths')
+        console.log(breath_lengths);
+        console.log('breath number')
+        console.log(jsonReceived.BNum)
+          time=0;
+      });
+
+    })
+</script>
+
+<script>
+      var socket = io.connect('http://' + document.domain + ':' + location.port); 
+      // Button to initiate Data Fetching
+      function startLive() {
+        console.log('Fetching Data From Server...');
+        socket.emit('requestFromClient');
+        var stopLiveButton=document.getElementById("stopLiveButton");
+        stopLiveButton.style.display="flex";
+      }
+      // Button to stop Data Fetching
+      function stopLive() {
+        console.log('Stopped Fetching Data From Server...');
+        socket.emit('stoprequestFromClient');
+      }
+</script>
+</body>
+</html>

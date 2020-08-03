@@ -1,0 +1,336 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style> 
+    #main {
+      border: 2px solid #131212;
+      display: block;
+      flex-wrap: wrap;
+      height: 180px;
+      width: 165px;
+      background-color:darksalmon;
+      position: fixed;
+      top: 0px;
+      left: 1350px;
+    }
+  </style>
+
+  <title>Flask SocketIO Test</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+
+
+<body>
+  <p>Mechanical Ventilation Live Monitoring using Flask-SocketIO</p>
+  <button onclick="startLive()">Start Live Monitoring</button>
+  <button onclick="stopLive()" id="stopLiveButton" style="display:none">Stop Live Monitoring</button>
+  <div class="chart" id="pressure_chart"></div>
+  <div class="chart" id="flow_chart"></div>
+  <div class="chart" id="volume_chart"></div>
+  <div id="main">
+      <div  id='Ers'>Ers: 0.00cmH2O/L</div><br>
+      <div  id='Rrs'>Rrs: 0.00cmH2O.s/L</div><br>
+      <div  id='PEEP'>PEEP: 0.00cmH2O</div><br>
+      <div  id='PIP'>PIP: 0.00cmH2O</div><br>
+      <div  id='Vtidal'>Vtidal: 0.00L</div><br>
+  </div>
+  <script type="text/javascript" src="//code.jquery.com/jquery-2.1.4.min.js"></script>
+  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.6/socket.io.min.js"></script>
+ 
+  <script type="text/javascript" charset="utf-8"> 
+    $(document).ready(function() {
+      // *Graph layout for P,Q,V
+      var pressure_layout = {
+        autosize: true,
+        // width: 1000,
+        height: 300,
+        title: "Pressure",
+        xaxis: {
+          title: "Time (s)",
+          //type: "date",
+          showgrid: false,
+          showline: true,
+          fixedrange: true,
+          zeroline: false,
+          tickmode:"array",
+          tickvals: "",
+          ticktext:""
+        },
+        yaxis: {
+          title: "cmH20",
+          fixedrange: true,
+          showline: true
+        },
+        font: {
+          family: "Fjalla One, sans-serif",
+          size: 18,
+          color: "black"
+        }
+      };
+
+      var flow_layout = {
+        autosize: true,
+        // width: 1000,
+        height: 300,
+        title: "Flow",
+        xaxis: {
+          title: "Time (s)",
+          //type: "date",
+          showgrid: false,
+          zeroline: false,
+          fixedrange: true,
+          tickmode:"array",
+          tickvals: "",
+          ticktext:""
+        },
+        yaxis: {
+          title: "L/min",
+          fixedrange: true,
+          showline: true
+        },
+        font: {
+          family: "Fjalla One, sans-serif",
+          size: 18,
+          color: "black"
+        }
+      };
+
+      var volume_layout = {
+        autosize: true,
+        // width: 1000,
+        height: 300,
+        title: "Volume",
+        xaxis: {
+          title: "Time (s)",
+          //type: "date",
+          showgrid: true,
+          zeroline: false,
+          fixedrange: true,
+          tickmode:"array",
+          tickvals: "",
+          ticktext:""
+        },
+        yaxis: {
+          title: "L",
+          fixedrange: true,
+          showline: true
+        },
+        font: {
+          family: "Fjalla One, sans-serif",
+          size: 18,
+          color: "black"
+        }
+      };
+
+      // *Initial empty array for P,Q,V data
+      var pressure_data = [
+        {
+          x: [],
+          y: [],
+          type: "line",
+          line: {
+            color: "rgb(55, 128, 191)",
+            width: 3
+          }
+        }
+      ];
+
+      var flow_data = [
+        {
+          x: [],
+          y: [],
+          type: "line",
+          line: {
+            color: "rgb(55, 128, 191)",
+            width: 3
+          }
+        }
+      ];
+
+      var volume_data = [
+        {
+          x: [],
+          y: [],
+          type: "line",
+          line: {
+            color: "rgb(55, 128, 191)",
+            width: 3
+          }
+        }
+      ];
+
+      // *Plot P,Q,V graph
+      Plotly.plot("pressure_chart", pressure_data, pressure_layout, { responsive: true });
+      Plotly.plot("flow_chart", flow_data, flow_layout, { responsive: true });
+      Plotly.plot("volume_chart", volume_data, volume_layout, { responsive: true });
+
+      var count = 0;
+      var P = [];
+      var Q = [];
+      var V = [];
+      var T = [];  
+      var Ers_display = [];
+      var Rrs_display = [];
+      var PEEP_display = [];
+      var PIP_display = [];
+      var Vtidal_display = [];    
+      var P_display = [];
+      var Q_display = [];
+      var V_display = [];
+      var T_display = []; 
+      var sprt = 0;
+      var layout_display = {
+        xaxis : {
+          tickvals : [],
+          ticktext : []
+        }        
+      }  
+      var newtickvals = [];
+      var newticktext = [];
+      var disp_length = 900;
+
+
+      for (var i = 0; i < 901; i++) {
+        P_display.push(NaN);
+        Q_display.push(NaN);
+        V_display.push(NaN);
+      }  
+
+      plot_time = 0.00;
+      for (var i = 0; i < disp_length; i++) {
+        T_display.push(plot_time);        
+        plot_time += 0.02;
+      }
+      
+      // update the display array
+      setInterval(function() {
+        if (P.length > 0) {
+          console.log('start to plot graph with data');
+          P_display[count] = P.shift();
+          Q_display[count] = Q.shift();
+          V_display[count] = V.shift();  
+
+          for (i = count + 1; i < count + 5; i++) {
+            P_display[i] = NaN;
+            Q_display[i] = NaN;
+            V_display[i] = NaN; 
+
+            if ((0.02*count).toFixed(2) == layout_display.xaxis.tickvals[0])  {
+              layout_display.xaxis.tickvals.shift();
+              layout_display.xaxis.ticktext.shift();
+            }       
+          }
+
+          if ((0.02*count).toFixed(2) == newtickvals[0]) {
+            layout_display.xaxis.tickvals.push(newtickvals[0]);
+            layout_display.xaxis.ticktext.push(newticktext[0]);
+            newtickvals.shift();
+            newticktext.shift();
+
+            document.getElementById('Ers').innerHTML = 'Ers:'+ Ers_display[0].toFixed(2) +'cmH2O/L';
+            document.getElementById('Rrs').innerHTML = 'Rrs:'+ Rrs_display[0].toFixed(2)  + 'cmH2O.s/L';
+            document.getElementById('PEEP').innerHTML = 'PEEP:'+ PEEP_display[0].toFixed(2)  + 'cmH2O';
+            document.getElementById('PIP').innerHTML = 'PIP:'+ PIP_display[0].toFixed(2)  + 'cmH2O';
+            document.getElementById('Vtidal').innerHTML = 'Vtidal:'+ Vtidal_display[0].toFixed(2)  + 'L';
+            Ers_display.shift();
+            Rrs_display.shift();
+            PEEP_display.shift();
+            PIP_display.shift();
+            Vtidal_display.shift();
+
+          }
+
+          count += 1;          
+
+          if (P[0] == 'end') {
+            // remove previous tailing data if new display array is shorter
+            if (count < disp_length) {
+              for (c = count; c < disp_length; c++){
+                P_display[c] = NaN;
+                Q_display[c] = NaN;
+                V_display[c] = NaN; 
+              }                 
+            }
+            P.shift();
+            Q.shift();
+            V.shift();
+            count = 0;
+            console.log('count has reseted to 0 ///////////////////////////////')       
+          }
+        }
+      }, 20);
+      
+      // update the plot
+      setInterval(function() {
+        if (P.length > 0) {
+          Plotly.update("pressure_chart", { x: [T_display], y: [P_display] }, layout_display);
+          Plotly.update("flow_chart", { x: [T_display], y: [Q_display] }, layout_display);
+          Plotly.update("volume_chart", { x: [T_display], y: [V_display] }, layout_display);        
+        }
+      }, 20);    
+
+
+      // verify our websocket connection is established
+      var socket = io.connect('http://' + document.domain + ':' + location.port);
+      socket.on('connect', function() {
+          console.log('Websocket connected!');
+      });
+
+      // arranging the incoming data
+      socket.on('send2Client', function(JSONfile) {
+          var j = 0;
+          var jsonReceived = JSON.parse(JSONfile); // dataPoints
+          var now = new Date();
+
+          // checks if the incoming data length will make the current array exceed 900 data
+          // if exceeds, populate the current array space with 'end' and start a new array
+          if (sprt+jsonReceived.Pressure.length>disp_length){
+            P.push('end');
+            Q.push('end');
+            V.push('end');
+            sprt = 0;
+          }
+
+          // get time in 24 hours format at start of every breath
+          newtickvals.push((0.02*sprt).toFixed(2));
+          newticktext.push([('0'+now.getHours()).slice(-2),':',('0'+now.getMinutes()).slice(-2),':',('0'+now.getSeconds()).slice(-2)].join(''));
+
+          for (i = 0; i < jsonReceived.Pressure.length; i++) {
+
+              P.push(jsonReceived.Pressure[i]);
+              Q.push(jsonReceived.FlowRate[i]);
+              V.push(jsonReceived.Volume[i]); 
+              sprt += 1;
+          } 
+
+          // updates the calculated data
+          Ers_display.push(jsonReceived.Ers);
+          Rrs_display.push(jsonReceived.Rrs);
+          PEEP_display.push(jsonReceived.PEEP);
+          PIP_display.push(jsonReceived.PIP);
+          Vtidal_display.push(jsonReceived.Vtidal);
+
+      });
+
+    })
+</script>
+
+<script>
+      var socket = io.connect('http://' + document.domain + ':' + location.port); 
+      // Button to initiate Data Fetching
+      function startLive() {
+        console.log('Fetching Data From Server...');
+        socket.emit('requestFromClient');
+        var stopLiveButton=document.getElementById("stopLiveButton");
+        stopLiveButton.style.display="flex";
+      }
+      // Button to stop Data Fetching
+      function stopLive() {
+        console.log('Stopped Fetching Data From Server...');
+        socket.emit('stoprequestFromClient');
+      }
+</script>
+</body>
+</html>

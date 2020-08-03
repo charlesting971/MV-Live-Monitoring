@@ -1,0 +1,179 @@
+{% extends "header.html" %}
+{% block title %}Patient Overview{% endblock %}
+{% block body%}
+<script
+  type="text/javascript"
+  src="//code.jquery.com/jquery-2.1.4.min.js"
+></script>
+<script
+  type="text/javascript"
+  src="//cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.4/socket.io.slim.js"
+></script>
+<script type="text/javascript" charset="utf-8">
+  $(document).ready(function() {
+    var flow_layout = {
+      autosize: true,
+      // width: 1000,
+      height: 300,
+      title: "Flow",
+      xaxis: {
+        title: "Time (s)",
+        // type: "date",
+        showgrid: false,
+        zeroline: false,
+        fixedrange: true
+        // tickformat: '%x %X',
+        // tickformat: "%X" // %x:date, %X:time
+      },
+      yaxis: {
+        title: "l/min",
+        fixedrange: true,
+        showline: true
+      },
+      font: {
+        family: "Fjalla One, sans-serif",
+        size: 18,
+        color: "black"
+      }
+    };
+
+    var data_flow_1 = [
+      {
+        x: [],
+        y: [],
+        type: "line",
+        line: {
+          color: "rgb(55, 128, 191)",
+          width: 3
+        }
+      }
+    ];
+    var data_pressure_1 = [
+      {
+        x: [],
+        y: [],
+        type: "line",
+        line: {
+          color: "rgb(55, 128, 191)",
+          width: 3
+        }
+      }
+    ];
+
+    // plot flow chart
+    Plotly.plot("flow-chart", data_flow_1, flow_layout, { responsive: true });
+
+    var pressure_layout = {
+      autosize: true,
+      // width: 1000,
+      height: 300,
+      title: "Pressure",
+      xaxis: {
+        title: "Time (s)",
+        // type: "date",
+        showgrid: false,
+        showline: true,
+        fixedrange: true,
+        zeroline: false
+        // tickformat: "%X"
+      },
+      yaxis: {
+        title: "cmH20",
+        fixedrange: true,
+        showline: true
+      },
+      font: {
+        family: "Fjalla One, sans-serif",
+        size: 18,
+        color: "black"
+      }
+    };
+
+    // plot pressure
+    Plotly.plot("pressure-chart", data_pressure_1, pressure_layout, {
+      responsive: true
+    });
+
+    var cnt = 0;
+    var Q_array = [];
+    var P_array = [];
+    var P = [];
+    var Q = [];
+    var T = [];
+
+    for (var i = 0; i < 501; i++) {
+      P_array.push(NaN);
+      Q_array.push(NaN);
+    }
+
+    plot_time = 0;
+    for (var i = 0; i < 500; i++) {
+      T.push(plot_time);
+      plot_time += 0.02;
+    }
+
+    // plot timer to break down single breath into multiple points, rate = 15ms
+    setInterval(function() {
+      if (Q.length > 0) {
+        Q_array[cnt] = Q[0];
+        P_array[cnt] = P[0];
+        Q.shift();
+        P.shift();
+        for (c = cnt + 1; c < cnt + 10; c++) {
+          Q_array[c] = NaN;
+          P_array[c] = NaN;
+        }
+        cnt += 1;
+        if (cnt > 495) {
+          cnt = 1;
+        }
+      }
+    }, 1 * 15);
+
+    // plot timer to control replotting of graph, refresh rate = 100ms
+    setInterval(function() {
+      if (Q.length > 0) {
+        Plotly.update("flow-chart", { x: [T], y: [Q_array] });
+        Plotly.update("pressure-chart", { x: [T], y: [P_array] });
+      }
+    }, 1 * 100);
+
+    var socket = io.connect("/{{ device }}");
+
+    socket.on("connect", function() {
+      socket.emit("my_event", { data: "I'm connected!" });
+    });
+
+    socket.on("disconnect", function() {
+      $("#log").append("<br>Disconnected");
+    });
+
+    // Push data to buffer when new breath come
+    socket.on("plot_response", function(msg) {
+      //   $("#log").append(
+      //     "<br>Received: " + msg.pressure + "\n" + msg.flow + "\n" + msg.rpi_time
+      //   );
+    //   $("#Ers").text("Ers: " + msg.Ers);
+    //   $("#Rrs").text("Rrs: " + msg.Rrs);
+      var jv_current_time = new Date().getTime();
+      var plot_time = [];
+      for (i = 0; i < msg.flow.length; i++) {
+        Q.push(msg.flow[i]);
+        P.push(msg.pressure[i]);
+      }
+      console.log(Q.length);
+    });
+  });
+</script>
+<body>
+  <div class="container">
+    <h1>Live Plot - {{ device }}</h1>
+    <!-- <p id="Ers">Ers:</p>
+    <p id="Rrs">Rrs:</p> -->
+    <div class="chart" id="pressure-chart"></div>
+    <div class="chart" id="flow-chart"></div>
+    <h2>Event Log:</h2>
+    <div><p id="log"></p></div>
+  </div>
+</body>
+{% endblock %}

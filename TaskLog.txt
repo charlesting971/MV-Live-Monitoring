@@ -1,0 +1,7 @@
+1) Add real time to the x-axis
+2) Create space on graph which can fill 8 Breath Cycle.
+3) Create another graph that will store previous 8 breath cycle.
+4) Make graph appear at their allocated space before start monitoring.
+5) Zoom all graphs simultaneously.
+6) Figure out how to deal with data coming in one breath at a time.
+7) How to split js and css file from html.
